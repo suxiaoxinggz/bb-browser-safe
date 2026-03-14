@@ -40,15 +40,11 @@ export async function sendCommand(request: Request): Promise<Response> {
           error: [
             "Chrome extension not connected.",
             "",
-            "Setup guide:",
-            "  1. Install:  npm install -g bb-browser",
-            "  2. Open:     chrome://extensions/ → Enable Developer Mode",
-            "  3. Load:     Click \"Load unpacked\" → select node_modules/bb-browser/extension/",
-            "  4. Start:    bb-browser daemon",
-            "  5. Verify:   bb-browser status",
+            "Install the extension:",
+            "  Option A: load node_modules/bb-browser/extension/",
+            "  Option B: download zip from https://github.com/epiral/bb-browser/releases/latest",
             "",
-            "Or download the extension from:",
-            "  https://github.com/epiral/bb-browser/releases",
+            "Then: chrome://extensions/ → Developer Mode → Load unpacked → select the extension folder",
           ].join("\n"),
         };
       }
