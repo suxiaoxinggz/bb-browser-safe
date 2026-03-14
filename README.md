@@ -16,153 +16,119 @@
 
 ---
 
-You're already logged into Gmail, Twitter, Reddit, Xiaohongshu — bb-browser lets AI agents use that. Not by stealing cookies or faking fingerprints. By **being** the browser.
+You're already logged into Reddit, Twitter, YouTube, Zhihu, Bilibili, Weibo, Douban, Xiaohongshu — bb-browser lets AI agents **use that directly**.
 
+```bash
+bb-browser site zhihu/hot                    # 知乎热榜
+bb-browser site weibo/hot                    # 微博热搜
+bb-browser site bilibili/popular             # B站热门
+bb-browser site douban/top250                # 豆瓣 Top 250
+bb-browser site youtube/transcript VIDEO_ID  # YouTube 字幕全文
+bb-browser site reddit/thread URL            # Reddit 讨论树
+bb-browser site twitter/user elonmusk        # Twitter 用户资料
+bb-browser site xiaohongshu/search 美食       # 小红书搜索
 ```
-AI Agent (Claude Code, Codex, etc.)
-       │ CLI commands
-       ▼
-bb-browser CLI ──HTTP──▶ Daemon ──SSE──▶ Chrome Extension
-                                              │
-                                              ▼ chrome.debugger (CDP)
-                                         Your Real Browser
-                                    (logged-in sites, cookies, sessions)
-```
 
-## Why
+**50+ commands across 10 platforms.** All using your real browser's login state. [Full list →](https://github.com/epiral/bb-sites)
 
-Every scraping tool tries to **pretend** it's a browser. bb-browser **is** the browser.
+## Why this is different
+
+Every browser automation tool can click buttons and fill forms. bb-browser does that too. But the real power is **site adapters** — pre-built commands that turn any website into a CLI/API, using your browser's login state.
+
+How it works under the hood: the adapter runs `eval` inside your browser tab. It calls `fetch()` with your cookies, or invokes the page's own Vue/Pinia store actions. The website thinks it's you. Because it **is** you.
 
 | | Playwright / Selenium | Scraping libs | bb-browser |
 |---|---|---|---|
 | Browser | Headless, isolated | No browser | Your real Chrome |
 | Login state | None, must re-login | Cookie extraction | Already there |
-| Anti-bot | Detected easily | Cat-and-mouse game | Invisible — it IS the user |
-| Internal sites | Need VPN/proxy setup | Can't reach | If you can see it, so can the agent |
+| Anti-bot | Detected easily | Cat-and-mouse | Invisible — it IS the user |
+| XHS signing | Can't replicate | Reverse engineer | Page signs it itself |
 
-## What it can do
+## Quick Start
 
-### Browser Automation
-
-```bash
-bb-browser open https://example.com
-bb-browser snapshot -i           # interactive elements only
-bb-browser click @0              # click by ref
-bb-browser fill @2 "hello"       # fill input
-bb-browser press Enter
-bb-browser screenshot
-```
-
-### Authenticated Fetch
-
-Like `curl`, but with your browser's login state. No API keys, no tokens.
-
-```bash
-# Reddit — you're logged in, just fetch
-bb-browser fetch https://www.reddit.com/api/me.json
-
-# Any website's internal API — the browser handles auth
-bb-browser fetch https://api.example.com/user/profile --json
-```
-
-### Network Capture
-
-See what any website sends and receives — request headers, bodies, response data. Like Chrome DevTools Network tab, but from CLI.
-
-```bash
-bb-browser network requests --filter "api.example.com" --with-body --json
-# → Full request headers (including auth/signing), full response body
-# → See exactly how a website's API works — then build an adapter for it
-```
-
-### Site Adapters
-
-Pre-built commands for popular websites. Community-driven via [bb-sites](https://github.com/epiral/bb-sites).
-
-```bash
-bb-browser site update                                    # install adapters
-bb-browser site reddit/thread https://reddit.com/r/...    # Reddit discussion tree
-bb-browser site twitter/user yan5xu                        # Twitter profile
-bb-browser site xiaohongshu/feed                           # Xiaohongshu feed
-bb-browser site hackernews/top                             # HN front page
-```
-
-> Xiaohongshu has request signing (X-s headers). Our adapters call the page's own Vue/Pinia store actions — the page signs the requests itself. Zero reverse engineering needed.
-
-## Install
+### Install
 
 ```bash
 npm install -g bb-browser
 ```
 
-Then load the Chrome extension:
+### Chrome Extension
 
-1. `chrome://extensions/` → Enable Developer Mode
-2. "Load unpacked" → select `node_modules/bb-browser/extension/`
-3. Done.
+1. Download from [Releases](https://github.com/epiral/bb-browser/releases/latest)
+2. Unzip → `chrome://extensions/` → Developer Mode → Load unpacked
+
+### Use
 
 ```bash
-bb-browser daemon    # start the daemon
-bb-browser status    # verify connection
+bb-browser site update    # pull 50+ community adapters
+bb-browser site list      # see what's available
+bb-browser site zhihu/hot # go
 ```
 
-## Command Reference
+### MCP (Claude Code / Cursor)
 
-| Category | Command | Description |
-|----------|---------|-------------|
-| **Navigate** | `open <url>` | Open URL |
-| | `back` / `forward` / `refresh` | Navigate |
-| | `close` | Close tab |
-| **Snapshot** | `snapshot` | Full DOM tree |
-| | `snapshot -i` | Interactive elements only |
-| **Interact** | `click <ref>` | Click element |
-| | `fill <ref> <text>` | Clear and fill |
-| | `type <ref> <text>` | Append text |
-| | `hover <ref>` | Hover |
-| | `press <key>` | Keyboard (Enter, Tab, Control+a) |
-| | `scroll <dir> [px]` | Scroll |
-| | `check` / `uncheck <ref>` | Checkbox |
-| | `select <ref> <val>` | Dropdown |
-| **Data** | `get text <ref>` | Element text |
-| | `get url` / `get title` | Page info |
-| | `screenshot [path]` | Screenshot |
-| | `eval "<js>"` | Run JavaScript |
-| **Fetch** | `fetch <url> [--json]` | Authenticated HTTP fetch |
-| **Site** | `site list` | List site adapters |
-| | `site <name> [args]` | Run adapter |
-| | `site update` | Update community adapters |
-| **Network** | `network requests [filter]` | View requests |
-| | `network requests --with-body` | Include headers & body |
-| | `network route "<url>" --abort` | Block requests |
-| | `network clear` | Clear records |
-| **Tab** | `tab` | List tabs |
-| | `tab new [url]` | New tab |
-| | `tab <n>` | Switch tab |
-| **Debug** | `console` / `errors` | Console & JS errors |
-| | `trace start` / `trace stop` | Record user actions |
-| **Daemon** | `daemon` / `stop` / `status` | Manage daemon |
+```json
+{
+  "mcpServers": {
+    "bb-browser": {
+      "command": "npx",
+      "args": ["-y", "bb-browser", "--mcp"]
+    }
+  }
+}
+```
 
-All commands support `--json` for structured output and `--tab <id>` for multi-tab operations.
+## Site Adapters — the core feature
+
+Community-driven via [bb-sites](https://github.com/epiral/bb-sites). One JS file per command.
+
+| Platform | Commands | Auth |
+|----------|----------|------|
+| **Reddit** | me, posts, thread, context | Cookie |
+| **Twitter/X** | user, thread | Bearer + CSRF |
+| **GitHub** | me, repo, issues, issue-create, pr-create, fork | Cookie |
+| **Hacker News** | top, thread | Public API |
+| **Zhihu** | me, hot, question, search | Cookie |
+| **Bilibili** | me, popular, ranking, search, video, comments, feed, history, trending | Cookie |
+| **Weibo** | me, hot, feed, user, user_posts, post, comments | Cookie |
+| **Douban** | search, movie, movie-hot, movie-top, top250, comments | Cookie |
+| **YouTube** | search, video, comments, channel, feed, transcript | innertube |
+| **Xiaohongshu** | me, feed, search, note, comments, user_posts | Pinia store |
+
+### Create your own
+
+```bash
+bb-browser guide    # full tutorial
+```
+
+Tell your AI agent "turn XX website into a CLI" — it reads the guide, reverse-engineers the API with `network --with-body`, writes the adapter, tests it, and submits a PR. All autonomously.
+
+## Also a full browser automation tool
+
+```bash
+bb-browser open https://example.com
+bb-browser snapshot -i                # accessibility tree
+bb-browser click @3                   # click element
+bb-browser fill @5 "hello"            # fill input
+bb-browser eval "document.title"      # run JS
+bb-browser fetch URL --json           # authenticated fetch
+bb-browser network requests --with-body --json  # capture traffic
+bb-browser screenshot                 # take screenshot
+```
+
+All commands support `--json` output and `--tab <id>` for concurrent multi-tab operations.
 
 ## Architecture
 
 ```
-bb-browser/
-├── packages/
-│   ├── cli/          # CLI (TypeScript, argument parsing, HTTP client)
-│   ├── daemon/       # HTTP daemon (SSE bridge, request-response matching)
-│   ├── extension/    # Chrome extension (Manifest V3, chrome.debugger CDP)
-│   └── shared/       # Shared types and protocol definitions
-├── dist/             # Build output (npm publish)
-└── extension/        # Built extension (npm publish)
+AI Agent (Claude Code, Codex, Cursor, etc.)
+       │ CLI or MCP (stdio)
+       ▼
+bb-browser CLI ──HTTP──▶ Daemon ──SSE──▶ Chrome Extension
+                                              │
+                                              ▼ chrome.debugger (CDP)
+                                         Your Real Browser
 ```
-
-| Layer | Tech |
-|-------|------|
-| CLI | TypeScript, zero dependencies |
-| Daemon | Node.js HTTP + SSE |
-| Extension | Chrome MV3 + `chrome.debugger` API |
-| Build | pnpm monorepo + Turborepo + tsup + Vite |
 
 ## License
 
