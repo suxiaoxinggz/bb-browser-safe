@@ -14,8 +14,7 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "clean": "rm -rf dist",
-    "test": "node --test test/*.test.mjs"
+    "clean": "rm -rf dist"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
