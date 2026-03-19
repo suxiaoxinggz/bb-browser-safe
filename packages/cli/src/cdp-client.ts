@@ -608,29 +608,49 @@ async function insertTextIntoNode(targetId: string, backendNodeId: number, text:
 
   await sessionCommand(targetId, "Runtime.callFunctionOn", {
     objectId: resolved.object.objectId,
-    functionDeclaration: `function(value, clearFirst) {
-      if (typeof this.focus === 'function') this.focus();
-      if (clearFirst && ('value' in this)) {
-        this.value = '';
-        this.dispatchEvent(new Event('input', { bubbles: true }));
+    functionDeclaration: `function(clearFirst) {
+      if (typeof this.scrollIntoView === 'function') {
+        this.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'center' });
       }
-      if ('value' in this) {
-        this.value = clearFirst ? value : String(this.value ?? '') + value;
-        this.dispatchEvent(new Event('input', { bubbles: true }));
-        this.dispatchEvent(new Event('change', { bubbles: true }));
+      if (typeof this.focus === 'function') this.focus();
+      if (this instanceof HTMLInputElement || this instanceof HTMLTextAreaElement) {
+        if (clearFirst) {
+          this.value = '';
+          this.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        if (typeof this.setSelectionRange === 'function') {
+          const end = this.value.length;
+          this.setSelectionRange(end, end);
+        }
+        return true;
+      }
+      if (this instanceof HTMLElement && this.isContentEditable) {
+        if (clearFirst) {
+          this.textContent = '';
+          this.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        const selection = window.getSelection();
+        if (selection) {
+          const range = document.createRange();
+          range.selectNodeContents(this);
+          range.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
         return true;
       }
       return false;
     }`,
     arguments: [
-      { value: text },
       { value: clearFirst },
     ],
     returnByValue: true,
   });
 
-  await focusNode(targetId, backendNodeId);
-  await sessionCommand(targetId, "Input.insertText", { text });
+  if (text) {
+    await focusNode(targetId, backendNodeId);
+    await sessionCommand(targetId, "Input.insertText", { text });
+  }
 }
 
 async function getNodeBox(targetId: string, backendNodeId: number): Promise<{ x: number; y: number }> {
