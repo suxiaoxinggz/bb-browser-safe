@@ -9,8 +9,7 @@
     "scripting",
     "debugger",
     "storage",
-    "alarms",
-    "history"
+    "alarms"
   ],
   "host_permissions": [
     "<all_urls>"

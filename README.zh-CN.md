@@ -1,6 +1,6 @@
 <div align="center">
 
-# bb-browser
+# bb-browser hardened
 
 ### 坏孩子浏览器 BadBoy Browser
 
@@ -15,6 +15,14 @@
 </div>
 
 ---
+
+这个 fork 保留了浏览器控制核心，但把默认信任模型改成了更保守的版本：
+
+- MCP 默认开启安全模式
+- `browser_eval`、`browser_network`、`site_run`、`site_recommend`、`site_update` 默认关闭，只有显式设置环境变量才会启用
+- 社区 adapter 默认禁用
+- 关闭后台静默 `git pull`
+- Chrome 扩展移除了 `history` 权限
 
 你已经登录了微博、知乎、B站、小红书、Twitter、GitHub、LinkedIn — bb-browser 让 AI Agent **直接用你的登录态**。
 
@@ -54,10 +62,12 @@ npm install -g bb-browser
 
 ### 使用
 
+这个 hardened 版本默认只跑你自己审过的本地 adapter：
+
 ```bash
-bb-browser site update        # 拉取社区适配器
-bb-browser site recommend     # 看看哪些和你的浏览习惯匹配
-bb-browser site zhihu/hot     # 开搞
+bb-browser site list          # 仅列出本地 adapter
+bb-browser site info foo/bar  # 查看已审查 adapter
+bb-browser site foo/bar       # 运行本地 adapter
 ```
 
 ### OpenClaw（无需安装扩展）
@@ -91,9 +101,26 @@ ClawHub Skill: [bb-browser-openclaw](https://clawhub.ai/yan5xu/bb-browser)
 }
 ```
 
+默认情况下，MCP 只暴露风险较低的浏览器操作工具，以及 `site_list`、`site_search`、`site_info`。
+
+如果你要重新开启受限能力，请在启动前显式设置环境变量：
+
+```bash
+export BB_BROWSER_ENABLE_EVAL=1
+export BB_BROWSER_ENABLE_NETWORK=1
+export BB_BROWSER_ENABLE_SITE_RUN=1
+export BB_BROWSER_ENABLE_SITE_RECOMMEND=1
+export BB_BROWSER_ENABLE_SITE_UPDATE=1
+export BB_BROWSER_ALLOW_COMMUNITY_SITES=1
+export BB_BROWSER_ALLOW_COMMUNITY_UPDATES=1
+export BB_BROWSER_ALLOW_HISTORY_RECOMMEND=1
+```
+
 ## 36 个平台，103 个命令
 
 社区驱动，通过 [bb-sites](https://github.com/epiral/bb-sites) 维护。每个命令一个 JS 文件。
+
+在这个 hardened fork 里，社区 adapter 默认不会被加载。你可以先审查后复制到 `~/.bb-browser/sites/`，或者显式设置 `BB_BROWSER_ALLOW_COMMUNITY_SITES=1`。
 
 | 类别 | 平台 | 命令 |
 |------|------|------|

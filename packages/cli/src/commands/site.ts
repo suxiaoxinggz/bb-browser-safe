@@ -26,6 +26,10 @@ const BB_DIR = join(homedir(), ".bb-browser");
 const LOCAL_SITES_DIR = join(BB_DIR, "sites");
 const COMMUNITY_SITES_DIR = join(BB_DIR, "bb-sites");
 const COMMUNITY_REPO = "https://github.com/epiral/bb-sites.git";
+const ALLOW_COMMUNITY_SITES = process.env.BB_BROWSER_ALLOW_COMMUNITY_SITES === "1";
+const ALLOW_COMMUNITY_UPDATES = process.env.BB_BROWSER_ALLOW_COMMUNITY_UPDATES === "1";
+const ALLOW_HISTORY_RECOMMEND = process.env.BB_BROWSER_ALLOW_HISTORY_RECOMMEND === "1";
+const ALLOW_AUTO_UPDATE = process.env.BB_BROWSER_ALLOW_AUTO_UPDATE === "1";
 
 function checkCliUpdate(): void {
   try {
@@ -35,6 +39,51 @@ function checkCliUpdate(): void {
       console.log(`\n📦 bb-browser ${latest} available (current: ${current}). Run: npm install -g bb-browser`);
     }
   } catch {}
+}
+
+function exitSecurityError(error: string, options: SiteOptions = {}, extra: Record<string, unknown> = {}): never {
+  if (options.json) {
+    exitJsonError(error, extra);
+  }
+
+  console.error(`[error] ${error}`);
+  if (typeof extra.hint === "string" && extra.hint) {
+    console.error(`  Hint: ${extra.hint}`);
+  }
+  if (typeof extra.action === "string" && extra.action) {
+    console.error(`  Action: ${extra.action}`);
+  }
+  process.exit(1);
+}
+
+function requireCommunityUpdatesEnabled(options: SiteOptions = {}): void {
+  if (ALLOW_COMMUNITY_UPDATES) {
+    return;
+  }
+
+  exitSecurityError(
+    "community adapter updates are disabled in the hardened build",
+    options,
+    {
+      hint: "Set BB_BROWSER_ALLOW_COMMUNITY_UPDATES=1 only if you have audited the bb-sites repository.",
+      action: "export BB_BROWSER_ALLOW_COMMUNITY_UPDATES=1",
+    },
+  );
+}
+
+function requireHistoryRecommendEnabled(options: SiteOptions = {}): void {
+  if (ALLOW_HISTORY_RECOMMEND) {
+    return;
+  }
+
+  exitSecurityError(
+    "history-based recommendations are disabled in the hardened build",
+    options,
+    {
+      hint: "Set BB_BROWSER_ALLOW_HISTORY_RECOMMEND=1 if you explicitly want bb-browser to inspect local browser history.",
+      action: "export BB_BROWSER_ALLOW_HISTORY_RECOMMEND=1",
+    },
+  );
 }
 
 export interface SiteOptions {
@@ -198,7 +247,7 @@ export function getSiteHintForDomain(url: string): string | null {
  * 获取所有 adapter（私有优先）
  */
 function getAllSites(): SiteMeta[] {
-  const community = scanSites(COMMUNITY_SITES_DIR, "community");
+  const community = ALLOW_COMMUNITY_SITES ? scanSites(COMMUNITY_SITES_DIR, "community") : [];
   const local = scanSites(LOCAL_SITES_DIR, "local");
 
   const byName = new Map<string, SiteMeta>();
@@ -296,6 +345,7 @@ function siteSearch(query: string, options: SiteOptions): void {
 }
 
 function siteUpdate(options: SiteOptions = {}): void {
+  requireCommunityUpdatesEnabled(options);
   mkdirSync(BB_DIR, { recursive: true });
   const updateMode = existsSync(join(COMMUNITY_SITES_DIR, ".git")) ? "pull" : "clone";
 
@@ -416,6 +466,7 @@ function siteInfo(name: string, options: SiteOptions): void {
 }
 
 async function siteRecommend(options: SiteOptions): Promise<void> {
+  requireHistoryRecommendEnabled(options);
   const days = options.days ?? 30;
   const historyDomains: HistoryDomain[] = getHistoryDomains(days);
   const sites = getAllSites();
@@ -524,6 +575,13 @@ async function siteRun(
       console.error("  Or:  bb-browser site update");
     }
     process.exit(1);
+  }
+
+  if (site.source === "community" && !ALLOW_COMMUNITY_SITES) {
+    exitSecurityError(`adapter "${name}" is from the community repository and is disabled in the hardened build`, options, {
+      hint: "Move the adapter into ~/.bb-browser/sites after reviewing it, or set BB_BROWSER_ALLOW_COMMUNITY_SITES=1 to enable community adapters.",
+      action: "export BB_BROWSER_ALLOW_COMMUNITY_SITES=1",
+    });
   }
 
   // 解析参数
@@ -832,6 +890,7 @@ export async function siteCommand(
 }
 
 function silentUpdate(): void {
+  if (!ALLOW_AUTO_UPDATE || !ALLOW_COMMUNITY_UPDATES) return;
   const gitDir = join(COMMUNITY_SITES_DIR, ".git");
   if (!existsSync(gitDir)) return;
   import("node:child_process").then(({ spawn }) => {

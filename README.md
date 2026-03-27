@@ -1,6 +1,6 @@
 <div align="center">
 
-# bb-browser
+# bb-browser hardened
 
 ### BadBoy Browser
 
@@ -15,6 +15,14 @@
 </div>
 
 ---
+
+This fork keeps the browser-control core, but changes the trust model for agent use:
+
+- MCP safe mode is on by default
+- `browser_eval`, `browser_network`, `site_run`, `site_recommend`, and `site_update` are disabled unless explicitly re-enabled with env vars
+- Community adapters are disabled by default
+- Automatic background `git pull` is disabled
+- The Chrome extension drops the `history` permission
 
 You're already logged into Twitter, Reddit, YouTube, Zhihu, Bilibili, LinkedIn, GitHub — bb-browser lets AI agents **use that directly**.
 
@@ -54,10 +62,12 @@ npm install -g bb-browser
 
 ### Use
 
+This hardened fork defaults to local-only, reviewed adapters:
+
 ```bash
-bb-browser site update        # pull community adapters
-bb-browser site recommend     # see which adapters match your browsing habits
-bb-browser site zhihu/hot     # go
+bb-browser site list          # local adapters only
+bb-browser site info foo/bar  # inspect a reviewed adapter
+bb-browser site foo/bar       # run a reviewed local adapter
 ```
 
 ### OpenClaw (no extension needed)
@@ -91,9 +101,26 @@ For use without OpenClaw (Claude Code MCP, standalone CLI):
 }
 ```
 
+By default, the MCP server exposes only lower-risk browser tools plus `site_list`, `site_search`, and `site_info`.
+
+To re-enable restricted capabilities, set env vars before launching:
+
+```bash
+export BB_BROWSER_ENABLE_EVAL=1
+export BB_BROWSER_ENABLE_NETWORK=1
+export BB_BROWSER_ENABLE_SITE_RUN=1
+export BB_BROWSER_ENABLE_SITE_RECOMMEND=1
+export BB_BROWSER_ENABLE_SITE_UPDATE=1
+export BB_BROWSER_ALLOW_COMMUNITY_SITES=1
+export BB_BROWSER_ALLOW_COMMUNITY_UPDATES=1
+export BB_BROWSER_ALLOW_HISTORY_RECOMMEND=1
+```
+
 ## 36 platforms, 103 commands
 
 Community-driven via [bb-sites](https://github.com/epiral/bb-sites). One JS file per command.
+
+In this hardened fork, community adapters are intentionally disabled by default. Copy reviewed adapters into `~/.bb-browser/sites/` or opt in explicitly with `BB_BROWSER_ALLOW_COMMUNITY_SITES=1`.
 
 | Category | Platforms | Commands |
 |----------|-----------|----------|

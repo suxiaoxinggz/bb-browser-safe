@@ -20,6 +20,12 @@ const EXT_HINT = [
 ].join("\n");
 
 const sessionOpenedTabs = new Set<string>();
+const SAFE_MODE = process.env.BB_BROWSER_SAFE_MODE !== "0";
+const ENABLE_BROWSER_EVAL = !SAFE_MODE || process.env.BB_BROWSER_ENABLE_EVAL === "1";
+const ENABLE_BROWSER_NETWORK = !SAFE_MODE || process.env.BB_BROWSER_ENABLE_NETWORK === "1";
+const ENABLE_SITE_RUN = !SAFE_MODE || process.env.BB_BROWSER_ENABLE_SITE_RUN === "1";
+const ENABLE_SITE_UPDATE = !SAFE_MODE || process.env.BB_BROWSER_ENABLE_SITE_UPDATE === "1";
+const ENABLE_SITE_RECOMMEND = !SAFE_MODE || process.env.BB_BROWSER_ENABLE_SITE_RECOMMEND === "1";
 
 function getDaemonPath(): string {
   const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -221,21 +227,25 @@ const server = new McpServer(
 
 Your browser is the API. No headless browser, no cookie extraction, no anti-bot bypass.
 
+This hardened build defaults to safe mode. High-risk capabilities stay disabled unless the user explicitly re-enables them with environment variables before starting the MCP server.
+
 Key capabilities:
 - browser_snapshot: Read page content via accessibility tree (use ref numbers to interact)
 - browser_click/fill/type: Interact with elements by ref from snapshot
-- browser_eval: Run JavaScript in page context (most powerful — full DOM/fetch access)
-- browser_network: Capture network requests/responses (API reverse engineering)
 - browser_screenshot: Visual page capture
 - browser_tab_list/tab_new: Multi-tab support — use tab parameter for concurrent operations
 - browser_close_all: Close tabs opened by bb-browser during the current MCP session
 
-Site adapters (pre-built commands for popular sites):
-- site_list/site_search/site_info: Discover available adapters and their signatures
-- site_recommend: Suggest adapters based on browsing history
-- site_run: Execute an adapter directly from MCP
+Restricted capabilities, disabled by default in safe mode:
+- browser_eval: Run JavaScript in page context
+- browser_network: Capture network requests/responses
+- site_run: Execute local or community site adapters
+- site_recommend: Inspect browser history for adapter recommendations
 - site_update: Pull the community adapter repository
-- Available: reddit, twitter, github, hackernews, xiaohongshu, zhihu, bilibili, weibo, douban, youtube
+
+Safe site adapter tools:
+- site_list/site_search/site_info: Discover available adapters and their signatures
+- Community adapters remain disabled unless the CLI is started with BB_BROWSER_ALLOW_COMMUNITY_SITES=1.
 
 To create a new site adapter, run: bb-browser guide` },
 );
@@ -374,41 +384,45 @@ server.tool(
   }
 );
 
-server.tool(
-  "browser_eval",
-  "Execute JavaScript in page context",
-  {
-    script: z.string().describe("JavaScript source to execute"),
-    tab: z.number().optional().describe("Tab ID to target"),
-  },
-  async ({ script, tab }) => {
-    const resp = await runCommand({ action: "eval", script, tabId: tab });
-    if (!resp.success) return responseError(resp);
-    return textResult(resp.data?.result ?? null);
-  }
-);
+if (ENABLE_BROWSER_EVAL) {
+  server.tool(
+    "browser_eval",
+    "Execute JavaScript in page context",
+    {
+      script: z.string().describe("JavaScript source to execute"),
+      tab: z.number().optional().describe("Tab ID to target"),
+    },
+    async ({ script, tab }) => {
+      const resp = await runCommand({ action: "eval", script, tabId: tab });
+      if (!resp.success) return responseError(resp);
+      return textResult(resp.data?.result ?? null);
+    }
+  );
+}
 
-server.tool(
-  "browser_network",
-  "Inspect or clear network activity",
-  {
-    command: z.enum(["requests", "clear"]).describe("Network command"),
-    filter: z.string().optional().describe("Optional URL substring filter"),
-    withBody: z.boolean().optional().describe("Include request and response bodies"),
-    tab: z.number().optional().describe("Tab ID to target"),
-  },
-  async ({ command, filter, withBody, tab }) => {
-    const resp = await runCommand({
-      action: "network",
-      networkCommand: command,
-      filter,
-      withBody,
-      tabId: tab,
-    });
-    if (!resp.success) return responseError(resp);
-    return textResult(command === "requests" ? resp.data?.networkRequests || [] : resp.data || "Cleared");
-  }
-);
+if (ENABLE_BROWSER_NETWORK) {
+  server.tool(
+    "browser_network",
+    "Inspect or clear network activity",
+    {
+      command: z.enum(["requests", "clear"]).describe("Network command"),
+      filter: z.string().optional().describe("Optional URL substring filter"),
+      withBody: z.boolean().optional().describe("Include request and response bodies"),
+      tab: z.number().optional().describe("Tab ID to target"),
+    },
+    async ({ command, filter, withBody, tab }) => {
+      const resp = await runCommand({
+        action: "network",
+        networkCommand: command,
+        filter,
+        withBody,
+        tabId: tab,
+      });
+      if (!resp.success) return responseError(resp);
+      return textResult(command === "requests" ? resp.data?.networkRequests || [] : resp.data || "Cleared");
+    }
+  );
+}
 
 server.tool(
   "browser_screenshot",
@@ -435,7 +449,7 @@ server.tool(
   "browser_get",
   "Get element text or attribute",
   {
-    attribute: z.enum(["text", "url", "title", "value", "html"]).describe("Attribute to retrieve"),
+    attribute: z.enum(["text", "url", "title", "value"]).describe("Attribute to retrieve"),
     ref: z.string().optional().describe("Optional element ref"),
     tab: z.number().optional().describe("Tab ID to target"),
   },
@@ -571,78 +585,84 @@ server.tool(
   }
 );
 
-server.tool(
-  "site_recommend",
-  "Recommend adapters based on recent browsing history",
-  {
-    days: z.number().int().positive().optional().describe("How many recent days of history to inspect"),
-  },
-  async ({ days }) => {
-    try {
-      const args = ["recommend", "--json"];
-      if (days !== undefined) {
-        args.push("--days", String(days));
+if (ENABLE_SITE_RECOMMEND) {
+  server.tool(
+    "site_recommend",
+    "Recommend adapters based on recent browsing history",
+    {
+      days: z.number().int().positive().optional().describe("How many recent days of history to inspect"),
+    },
+    async ({ days }) => {
+      try {
+        const args = ["recommend", "--json"];
+        if (days !== undefined) {
+          args.push("--days", String(days));
+        }
+        const result = await runSiteCli(args);
+        return textResult(result);
+      } catch (error) {
+        return errorResult(error instanceof Error ? error.message : String(error));
       }
-      const result = await runSiteCli(args);
-      return textResult(result);
-    } catch (error) {
-      return errorResult(error instanceof Error ? error.message : String(error));
     }
-  }
-);
+  );
+}
 
-server.tool(
-  "site_run",
-  "Run a site adapter and return its structured data",
-  {
-    name: z.string().describe("Adapter name, e.g. twitter/search"),
-    args: z.array(z.string()).optional().describe("Positional arguments in adapter-defined order"),
-    namedArgs: z.record(z.string()).optional().describe("Named adapter arguments passed as --key value"),
-    tab: z.number().optional().describe("Optional tab ID to target"),
-    openclaw: z.boolean().optional().describe("Prefer the OpenClaw browser instead of the extension flow"),
-  },
-  async ({ name, args, namedArgs, tab, openclaw }) => {
-    try {
-      const cliArgs = ["run", name];
+if (ENABLE_SITE_RUN) {
+  server.tool(
+    "site_run",
+    "Run a site adapter and return its structured data",
+    {
+      name: z.string().describe("Adapter name, e.g. twitter/search"),
+      args: z.array(z.string()).optional().describe("Positional arguments in adapter-defined order"),
+      namedArgs: z.record(z.string()).optional().describe("Named adapter arguments passed as --key value"),
+      tab: z.number().optional().describe("Optional tab ID to target"),
+      openclaw: z.boolean().optional().describe("Prefer the OpenClaw browser instead of the extension flow"),
+    },
+    async ({ name, args, namedArgs, tab, openclaw }) => {
+      try {
+        const cliArgs = ["run", name];
 
-      for (const arg of args || []) {
-        cliArgs.push(arg);
+        for (const arg of args || []) {
+          cliArgs.push(arg);
+        }
+
+        for (const [key, value] of Object.entries(namedArgs || {})) {
+          cliArgs.push(`--${key}`, value);
+        }
+
+        if (tab !== undefined) {
+          cliArgs.push("--tab", String(tab));
+        }
+        if (openclaw) {
+          cliArgs.push("--openclaw");
+        }
+        cliArgs.push("--json");
+
+        const result = await runSiteCli(cliArgs);
+        const unwrapped = result && typeof result === "object" && "data" in result ? result.data : result;
+        return textResult(unwrapped);
+      } catch (error) {
+        return errorResult(error instanceof Error ? error.message : String(error));
       }
-
-      for (const [key, value] of Object.entries(namedArgs || {})) {
-        cliArgs.push(`--${key}`, value);
-      }
-
-      if (tab !== undefined) {
-        cliArgs.push("--tab", String(tab));
-      }
-      if (openclaw) {
-        cliArgs.push("--openclaw");
-      }
-      cliArgs.push("--json");
-
-      const result = await runSiteCli(cliArgs);
-      const unwrapped = result && typeof result === "object" && "data" in result ? result.data : result;
-      return textResult(unwrapped);
-    } catch (error) {
-      return errorResult(error instanceof Error ? error.message : String(error));
     }
-  }
-);
+  );
+}
 
-server.tool(
-  "site_update",
-  "Pull or clone the community adapter repository",
-  {},
-  async () => {
-    try {
-      const result = await runSiteCli(["update", "--json"]);
-      return textResult(result);
-    } catch (error) {
-      return errorResult(error instanceof Error ? error.message : String(error));
+if (ENABLE_SITE_UPDATE) {
+  server.tool(
+    "site_update",
+    "Pull or clone the community adapter repository",
+    {},
+    async () => {
+      try {
+        const result = await runSiteCli(["update", "--json"]);
+        return textResult(result);
+      } catch (error) {
+        return errorResult(error instanceof Error ? error.message : String(error));
+      }
     }
-  }
-);
+  );
+}
 
 export async function startMcpServer() {
   const transport = new StdioServerTransport();
