@@ -116,6 +116,28 @@ export BB_BROWSER_ALLOW_COMMUNITY_UPDATES=1
 export BB_BROWSER_ALLOW_HISTORY_RECOMMEND=1
 ```
 
+### 给 Codex 安装
+
+这个仓库自带一个本地安装脚本，可以直接把 hardened MCP 配到 Codex：
+
+```bash
+cd /Users/suxiaoxing/bb-browser-safe
+pnpm install --frozen-lockfile
+pnpm build
+bash scripts/install-codex-mcp.sh
+```
+
+脚本会在 `~/.codex/config.toml` 里追加一个受管理的配置块，并让 Codex 直接调用本地 build 出来的 MCP：
+
+```toml
+[mcp_servers.bb_browser_safe]
+command = "node"
+args = ["/Users/suxiaoxing/bb-browser-safe/dist/mcp.js"]
+startup_timeout_sec = 60.0
+```
+
+执行完后，重启 Codex，并把 `./extension` 作为已解压扩展加载到 Chrome。
+
 ## 36 个平台，103 个命令
 
 社区驱动，通过 [bb-sites](https://github.com/epiral/bb-sites) 维护。每个命令一个 JS 文件。

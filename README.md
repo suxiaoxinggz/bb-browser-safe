@@ -116,6 +116,28 @@ export BB_BROWSER_ALLOW_COMMUNITY_UPDATES=1
 export BB_BROWSER_ALLOW_HISTORY_RECOMMEND=1
 ```
 
+### Codex install
+
+This repo includes a local installer for Codex:
+
+```bash
+cd /Users/suxiaoxing/bb-browser-safe
+pnpm install --frozen-lockfile
+pnpm build
+bash scripts/install-codex-mcp.sh
+```
+
+The installer appends a managed block to `~/.codex/config.toml` and points Codex at the local built MCP entry:
+
+```toml
+[mcp_servers.bb_browser_safe]
+command = "node"
+args = ["/Users/suxiaoxing/bb-browser-safe/dist/mcp.js"]
+startup_timeout_sec = 60.0
+```
+
+After that, reload Codex and load the unpacked Chrome extension from `./extension`.
+
 ## 36 platforms, 103 commands
 
 Community-driven via [bb-sites](https://github.com/epiral/bb-sites). One JS file per command.
