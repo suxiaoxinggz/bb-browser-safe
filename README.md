@@ -1,109 +1,218 @@
-<div align="center">
+# bb-browser-safe
 
-# bb-browser hardened
+Hardened fork of [`epiral/bb-browser`](https://github.com/epiral/bb-browser) for local agent use in Codex, Claude Code, and similar MCP clients.
 
-### BadBoy Browser
+This fork keeps the original browser-control model, but changes the default trust model:
 
-**Your browser is the API. No keys. No bots. No scrapers.**
-
-[![npm](https://img.shields.io/npm/v/bb-browser?color=CB3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/bb-browser)
-[![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)](https://nodejs.org)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-
-[English](README.md) · [中文](README.zh-CN.md)
-
-</div>
-
----
-
-This fork keeps the browser-control core, but changes the trust model for agent use:
-
-- MCP safe mode is on by default
-- `browser_eval`, `browser_network`, `site_run`, `site_recommend`, and `site_update` are disabled unless explicitly re-enabled with env vars
+- Safe mode is on by default
+- High-risk MCP tools are disabled unless explicitly re-enabled
 - Community adapters are disabled by default
-- Automatic background `git pull` is disabled
-- The Chrome extension drops the `history` permission
+- Silent background `git pull` is disabled
+- Chrome extension `history` permission is removed
+- CLI now prefers the real `daemon + extension` path instead of stale managed-browser CDP detection
+- MCP exposes a small read-only resource so Codex stops warning on `resources/list`
 
-You're already logged into Twitter, Reddit, YouTube, Zhihu, Bilibili, LinkedIn, GitHub — bb-browser lets AI agents **use that directly**.
+## Why this fork exists
+
+Upstream `bb-browser` is powerful, but its default assumptions are optimized for capability, not containment:
+
+- it can execute page-context JavaScript with your real login state
+- it can inspect network traffic and browser history
+- it can pull and execute community adapter code from a remote repo
+- its CLI mixes two different execution paths: direct CDP and daemon + extension
+
+For agent-driven environments like Codex, those defaults are too permissive. This fork changes the defaults so the system is usable without immediately trusting:
+
+- remote adapter code
+- history-based recommendation logic
+- arbitrary page `eval`
+- network/body inspection
+
+## Main differences from upstream
+
+| Area | Upstream `bb-browser` | `bb-browser-safe` |
+|---|---|---|
+| MCP defaults | full browser/control surface | safe mode by default |
+| `browser_eval` | enabled | disabled by default |
+| `browser_network` | enabled | disabled by default |
+| `site_run` | enabled | disabled by default |
+| `site_update` | enabled | disabled by default |
+| community adapters | loaded from `~/.bb-browser/bb-sites` | ignored unless explicitly enabled |
+| background auto-update | silent `git pull` | disabled |
+| extension permissions | includes `history` | `history` removed |
+| Codex resources | no resources, warns on `resources/list` | ships a harmless read-only status resource |
+| CLI transport | often falls back to managed-browser CDP path | prefers daemon + extension first |
+
+## Branches and commits
+
+This repo is intentionally organized in 3 steps so you can diff or cherry-pick only the layer you want.
+
+### `phase-1-safe-defaults`
+
+Commit: `e0fe5c6`
+
+What it changes:
+
+- adds safe-mode gating in MCP
+- disables risky tools by default
+- disables community adapters by default
+- disables history recommendation by default
+- disables silent adapter updates
+- removes extension `history` permission
+
+Use this if you only want the hardening layer and do not care about Codex-specific setup yet.
+
+### `phase-2-codex-installer`
+
+Commit: `85ea7d8`
+
+Adds on top of phase 1:
+
+- Codex installer script
+- Codex MCP config template
+- updated docs for local Codex installation
+
+Use this if you want safe defaults plus a clean local install path for Codex.
+
+### `main`
+
+Commit: `11c9952`
+
+Adds on top of phase 2:
+
+- daemon-first CLI request routing
+- fixed `status` command to report daemon/extension state correctly
+- fixed CLI behavior when extension flow is active
+- MCP read-only resource for `resources/list`
+
+Use this if you want the complete usable fork.
+
+## Repository layout
+
+- `main`: complete fork for everyday use
+- `phase-1-safe-defaults`: security baseline only
+- `phase-2-codex-installer`: security baseline + Codex install tooling
+
+## Installation
+
+### Requirements
+
+- Node.js 18+
+- `pnpm`
+- Google Chrome or Brave
+- Chrome extension loaded from this repo's `extension/` directory
+
+### Build locally
 
 ```bash
-bb-browser site twitter/search "AI agent"       # search tweets
-bb-browser site zhihu/hot                        # trending on Zhihu
-bb-browser site arxiv/search "transformer"       # search papers
-bb-browser site eastmoney/stock "茅台"            # real-time stock quote
-bb-browser site boss/search "AI engineer"        # search jobs
-bb-browser site wikipedia/summary "Python"       # Wikipedia summary
-bb-browser site youtube/transcript VIDEO_ID      # full transcript
-bb-browser site stackoverflow/search "async"     # search SO questions
+git clone https://github.com/suxiaoxinggz/bb-browser-safe.git
+cd bb-browser-safe
+pnpm install --frozen-lockfile
+pnpm build
 ```
 
-**103 commands across 36 platforms.** All using your real browser's login state. [Full list →](https://github.com/epiral/bb-sites)
+## Chrome extension setup
 
-## The idea
-
-The internet was built for browsers. AI agents have been trying to access it through APIs — but 99% of websites don't offer one.
-
-bb-browser flips this: **instead of forcing websites to provide machine interfaces, let machines use the human interface directly.** The adapter runs `eval` inside your browser tab, calls `fetch()` with your cookies, or invokes the page's own webpack modules. The website thinks it's you. Because it **is** you.
-
-| | Playwright / Selenium | Scraping libs | bb-browser |
-|---|---|---|---|
-| Browser | Headless, isolated | No browser | Your real Chrome |
-| Login state | None, must re-login | Cookie extraction | Already there |
-| Anti-bot | Detected easily | Cat-and-mouse | Invisible — it IS the user |
-| Complex auth | Can't replicate | Reverse engineer | Page handles it itself |
-
-## Quick Start
-
-### Install
+Load the unpacked extension from:
 
 ```bash
-npm install -g bb-browser
+./extension
 ```
 
-### Use
+In Chrome:
 
-This hardened fork defaults to local-only, reviewed adapters:
+1. Open `chrome://extensions/`
+2. Enable Developer Mode
+3. Click `Load unpacked`
+4. Select this repo's `extension/` directory
+
+Once loaded, the extension should connect to the local daemon on `localhost:19824`.
+
+## Codex installation
+
+This repo includes a local installer:
 
 ```bash
-bb-browser site list          # local adapters only
-bb-browser site info foo/bar  # inspect a reviewed adapter
-bb-browser site foo/bar       # run a reviewed local adapter
+cd /Users/suxiaoxing/bb-browser-safe
+pnpm install --frozen-lockfile
+pnpm build
+bash scripts/install-codex-mcp.sh
 ```
 
-### OpenClaw (no extension needed)
+The installer appends a managed block to `~/.codex/config.toml` like this:
 
-If you use [OpenClaw](https://openclaw.ai), bb-browser runs directly through OpenClaw's built-in browser — no Chrome extension or daemon required:
+```toml
+[mcp_servers.bb_browser_safe]
+command = "node"
+args = ["/Users/suxiaoxing/bb-browser-safe/dist/mcp.js"]
+startup_timeout_sec = 60.0
 
-```bash
-bb-browser site reddit/hot --openclaw
-bb-browser site xueqiu/hot-stock 5 --openclaw --jq '.items[] | {name, changePercent}'
+[mcp_servers.bb_browser_safe.env]
+BB_BROWSER_SAFE_MODE = "1"
+BB_BROWSER_ENABLE_EVAL = "0"
+BB_BROWSER_ENABLE_NETWORK = "0"
+BB_BROWSER_ENABLE_SITE_RUN = "0"
+BB_BROWSER_ENABLE_SITE_RECOMMEND = "0"
+BB_BROWSER_ENABLE_SITE_UPDATE = "0"
+BB_BROWSER_ALLOW_COMMUNITY_SITES = "0"
+BB_BROWSER_ALLOW_COMMUNITY_UPDATES = "0"
+BB_BROWSER_ALLOW_HISTORY_RECOMMEND = "0"
 ```
 
-Skill on ClawHub: [bb-browser-openclaw](https://clawhub.ai/yan5xu/bb-browser)
+After installation:
 
-### Chrome Extension (standalone mode)
+1. Restart Codex
+2. Make sure the extension is still loaded
+3. Verify with a low-risk call such as a tab list or snapshot
 
-For use without OpenClaw (Claude Code MCP, standalone CLI):
+## Runtime model
 
-1. Download from [Releases](https://github.com/epiral/bb-browser/releases/latest)
-2. Unzip → `chrome://extensions/` → Developer Mode → Load unpacked
+The intended execution path in this fork is:
 
-### MCP (Claude Code / Cursor)
-
-```json
-{
-  "mcpServers": {
-    "bb-browser": {
-      "command": "npx",
-      "args": ["-y", "bb-browser", "--mcp"]
-    }
-  }
-}
+```text
+Codex / MCP client
+  -> local MCP server
+  -> bb-browser daemon (localhost:19824)
+  -> Chrome extension
+  -> real browser tab
 ```
 
-By default, the MCP server exposes only lower-risk browser tools plus `site_list`, `site_search`, and `site_info`.
+The CLI has been adjusted to prefer this path first. Direct CDP fallback remains only as a backup path.
 
-To re-enable restricted capabilities, set env vars before launching:
+## Default safe-mode behavior
+
+When `BB_BROWSER_SAFE_MODE=1`:
+
+- enabled:
+  - `browser_snapshot`
+  - `browser_click`
+  - `browser_fill`
+  - `browser_type`
+  - `browser_open`
+  - `browser_tab_list`
+  - `browser_tab_new`
+  - `browser_press`
+  - `browser_scroll`
+  - `browser_screenshot`
+  - `browser_get`
+  - `browser_close`
+  - `browser_close_all`
+  - `browser_hover`
+  - `browser_wait`
+  - `site_list`
+  - `site_search`
+  - `site_info`
+
+- disabled by default:
+  - `browser_eval`
+  - `browser_network`
+  - `site_run`
+  - `site_recommend`
+  - `site_update`
+
+## Re-enabling restricted features
+
+If you explicitly want the original higher-risk behavior, set env vars before launching the MCP server:
 
 ```bash
 export BB_BROWSER_ENABLE_EVAL=1
@@ -116,130 +225,65 @@ export BB_BROWSER_ALLOW_COMMUNITY_UPDATES=1
 export BB_BROWSER_ALLOW_HISTORY_RECOMMEND=1
 ```
 
-### Codex install
+Recommended rule:
 
-This repo includes a local installer for Codex:
+- only enable one capability at a time
+- only enable community adapters after reviewing the adapter source
+
+## Local reviewed adapters
+
+Put reviewed adapters under:
+
+```bash
+~/.bb-browser/sites/
+```
+
+This fork treats that directory as the preferred trust boundary.
+
+## Quick verification
+
+With daemon and extension connected:
+
+```bash
+node dist/cli.js status --json
+node dist/cli.js tab list --json
+node dist/cli.js snapshot -i --json
+```
+
+Expected behavior:
+
+- `status` shows `running: true`
+- `tab list` returns real tabs
+- `snapshot` works on normal web pages and fails on restricted pages like `chrome://extensions`
+
+## Security notes
+
+This fork is safer than upstream by default, but it is still high privilege software.
+
+It can still:
+
+- drive your real browser
+- use your real login state
+- click, type, navigate, and read page content
+
+So the right mental model is:
+
+- safer defaults
+- not a sandbox
+
+## Pushing this repo
+
+If you cloned locally from upstream and want to publish your own remote:
 
 ```bash
 cd /Users/suxiaoxing/bb-browser-safe
-pnpm install --frozen-lockfile
-pnpm build
-bash scripts/install-codex-mcp.sh
-```
-
-The installer appends a managed block to `~/.codex/config.toml` and points Codex at the local built MCP entry:
-
-```toml
-[mcp_servers.bb_browser_safe]
-command = "node"
-args = ["/Users/suxiaoxing/bb-browser-safe/dist/mcp.js"]
-startup_timeout_sec = 60.0
-```
-
-After that, reload Codex and load the unpacked Chrome extension from `./extension`.
-
-## 36 platforms, 103 commands
-
-Community-driven via [bb-sites](https://github.com/epiral/bb-sites). One JS file per command.
-
-In this hardened fork, community adapters are intentionally disabled by default. Copy reviewed adapters into `~/.bb-browser/sites/` or opt in explicitly with `BB_BROWSER_ALLOW_COMMUNITY_SITES=1`.
-
-| Category | Platforms | Commands |
-|----------|-----------|----------|
-| **Search** | Google, Baidu, Bing, DuckDuckGo, Sogou WeChat | search |
-| **Social** | Twitter/X, Reddit, Weibo, Xiaohongshu, Jike, LinkedIn, Hupu | search, feed, thread, user, notifications, hot |
-| **News** | BBC, Reuters, 36kr, Toutiao, Eastmoney | headlines, search, newsflash, hot |
-| **Dev** | GitHub, StackOverflow, HackerNews, CSDN, cnblogs, V2EX, Dev.to, npm, PyPI, arXiv | search, issues, repo, top, thread, package |
-| **Video** | YouTube, Bilibili | search, video, transcript, popular, comments, feed |
-| **Entertainment** | Douban, IMDb, Genius, Qidian | movie, search, top250 |
-| **Finance** | Xueqiu, Eastmoney, Yahoo Finance | stock, hot stocks, feed, watchlist, search |
-| **Jobs** | BOSS Zhipin, LinkedIn | search, detail, profile |
-| **Knowledge** | Wikipedia, Zhihu, Open Library | search, summary, hot, question |
-| **Shopping** | SMZDM | search deals |
-| **Tools** | Youdao, GSMArena, Product Hunt, Ctrip | translate, phone specs, trending products |
-
-## 10 minutes to add any website
-
-```bash
-bb-browser guide    # full tutorial
-```
-
-Tell your AI agent: *"turn XX website into a CLI"*. It reads the guide, reverse-engineers the API with `network --with-body`, writes the adapter, tests it, and submits a PR. All autonomously.
-
-Three tiers of adapter complexity:
-
-| Tier | Auth method | Example | Time |
-|------|-------------|---------|------|
-| **1** | Cookie (fetch directly) | Reddit, GitHub, V2EX | ~1 min |
-| **2** | Bearer + CSRF token | Twitter, Zhihu | ~3 min |
-| **3** | Webpack injection / Pinia store | Twitter search, Xiaohongshu | ~10 min |
-
-We tested this: **20 AI agents ran in parallel, each independently reverse-engineered a website and produced a working adapter.** The marginal cost of adding a new website to the agent-accessible internet is approaching zero.
-
-## What this means for AI agents
-
-Without bb-browser, an AI agent's world is: **files + terminal + a few APIs with keys.**
-
-With bb-browser: **files + terminal + the entire internet.**
-
-An agent can now, in under a minute:
-
-```bash
-# Cross-platform research on any topic
-bb-browser site arxiv/search "retrieval augmented generation"
-bb-browser site twitter/search "RAG"
-bb-browser site github search rag-framework
-bb-browser site stackoverflow/search "RAG implementation"
-bb-browser site zhihu/search "RAG"
-bb-browser site 36kr/newsflash
-```
-
-Six platforms, six dimensions, structured JSON. Faster and broader than any human researcher.
-
-## Also a full browser automation tool
-
-```bash
-bb-browser open https://example.com
-bb-browser snapshot -i                # accessibility tree
-bb-browser click @3                   # click element
-bb-browser fill @5 "hello"            # fill input
-bb-browser eval "document.title"      # run JS
-bb-browser fetch URL --json           # authenticated fetch
-bb-browser network requests --with-body --json  # capture traffic
-bb-browser screenshot                 # take screenshot
-```
-
-All commands support `--json` output, `--jq <expr>` for inline filtering, and `--tab <id>` for concurrent multi-tab operations.
-
-```bash
-bb-browser site xueqiu/hot-stock 5 --jq '.items[] | {name, changePercent}'
-# {"name":"云天化","changePercent":"2.08%"}
-# {"name":"东芯股份","changePercent":"-7.60%"}
-
-bb-browser site info xueqiu/stock   # view adapter args, example, domain
-```
-
-## Daemon configuration
-
-The daemon binds to `localhost:19824` by default. You can customize the host with `--host`:
-
-```bash
-bb-browser daemon --host 127.0.0.1    # IPv4 only (fix macOS IPv6 issues)
-bb-browser daemon --host 0.0.0.0      # listen on all interfaces (for Tailscale / ZeroTier remote access)
-```
-
-## Architecture
-
-```
-AI Agent (Claude Code, Codex, Cursor, etc.)
-       │ CLI or MCP (stdio)
-       ▼
-bb-browser CLI ──HTTP──▶ Daemon ──SSE──▶ Chrome Extension
-                                              │
-                                              ▼ chrome.debugger (CDP)
-                                         Your Real Browser
+git remote rename origin upstream
+git remote add origin https://github.com/suxiaoxinggz/bb-browser-safe.git
+git push -u origin main
+git push origin phase-1-safe-defaults
+git push origin phase-2-codex-installer
 ```
 
 ## License
 
-[MIT](LICENSE)
+MIT, inherited from upstream.
