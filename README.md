@@ -165,6 +165,47 @@ After installation:
 2. Make sure the extension is still loaded
 3. Verify with a low-risk call such as a tab list or snapshot
 
+## Switching between safe and power modes
+
+This fork includes two mode-switch scripts:
+
+```bash
+bash scripts/enable-safe-mode.sh
+bash scripts/enable-power-mode.sh
+```
+
+These scripts rewrite the managed `bb_browser_safe` block in `~/.codex/config.toml`. After running either script, restart Codex.
+
+What `power` mode enables:
+
+- `browser_eval`
+- `browser_network`
+- `site_run`
+- `site_recommend`
+- `site_update`
+- community adapters
+- community adapter updates
+
+By default, the extension itself is left unchanged. If you also want browser history access, run:
+
+```bash
+bash scripts/enable-power-mode.sh --with-history
+```
+
+That updates the unpacked extension manifest to add the `history` permission. After that, reload the unpacked extension in `chrome://extensions/`.
+
+To return to the hardened default:
+
+```bash
+bash scripts/enable-safe-mode.sh
+```
+
+To also remove the extension `history` permission again:
+
+```bash
+bash scripts/enable-safe-mode.sh --with-history
+```
+
 ## Runtime model
 
 The intended execution path in this fork is:

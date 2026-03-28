@@ -19,6 +19,8 @@
     "build:release": "tsup && pnpm build:extension",
     "build:extension": "rm -rf extension && cp -r packages/extension/dist extension",
     "install:codex": "bash scripts/install-codex-mcp.sh",
+    "mode:safe": "bash scripts/enable-safe-mode.sh",
+    "mode:power": "bash scripts/enable-power-mode.sh",
     "dev": "turbo run dev",
     "test": "turbo run test",
     "lint": "turbo run lint",

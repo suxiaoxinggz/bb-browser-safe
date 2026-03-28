@@ -172,6 +172,47 @@ BB_BROWSER_ALLOW_HISTORY_RECOMMEND = "0"
 2. 确认扩展仍然已加载
 3. 用低风险命令做一次验证，例如 `tab list` 或 `snapshot`
 
+## 在 safe 和 power 模式之间切换
+
+这个 fork 现在自带两条切换脚本：
+
+```bash
+bash scripts/enable-safe-mode.sh
+bash scripts/enable-power-mode.sh
+```
+
+这两个脚本会改写 `~/.codex/config.toml` 里受管理的 `bb_browser_safe` 配置块。执行之后，需要你重启一次 Codex。
+
+`power` 模式会打开这些能力：
+
+- `browser_eval`
+- `browser_network`
+- `site_run`
+- `site_recommend`
+- `site_update`
+- 社区 adapter
+- 社区 adapter 更新
+
+默认情况下，扩展本身不会被修改。如果你还想恢复“浏览器历史读取”权限，需要额外执行：
+
+```bash
+bash scripts/enable-power-mode.sh --with-history
+```
+
+这会修改已解压扩展的 `manifest`，把 `history` 权限加回来。改完后你还需要去 `chrome://extensions/` 手动点一次“重新加载”。
+
+如果要切回加固后的默认模式：
+
+```bash
+bash scripts/enable-safe-mode.sh
+```
+
+如果还要顺手把扩展里的 `history` 权限去掉：
+
+```bash
+bash scripts/enable-safe-mode.sh --with-history
+```
+
 ## 运行模型
 
 这个 fork 预期使用的是下面这条链路：
