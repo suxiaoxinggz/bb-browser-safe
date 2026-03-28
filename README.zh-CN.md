@@ -1,109 +1,225 @@
-<div align="center">
+# bb-browser-safe
 
-# bb-browser hardened
+这是 [`epiral/bb-browser`](https://github.com/epiral/bb-browser) 的一个加固 fork，面向 Codex、Claude Code 以及类似 MCP 客户端的本地 agent 使用场景。
 
-### 坏孩子浏览器 BadBoy Browser
+这个 fork 保留了原项目“直接控制真实浏览器”的核心能力，但把默认信任模型改成了更保守的版本：
 
-**你的浏览器就是 API。不需要密钥，不需要爬虫，不需要模拟。**
-
-[![npm](https://img.shields.io/npm/v/bb-browser?color=CB3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/bb-browser)
-[![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)](https://nodejs.org)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-
-[English](README.md) · [中文](README.zh-CN.md)
-
-</div>
-
----
-
-这个 fork 保留了浏览器控制核心，但把默认信任模型改成了更保守的版本：
-
-- MCP 默认开启安全模式
-- `browser_eval`、`browser_network`、`site_run`、`site_recommend`、`site_update` 默认关闭，只有显式设置环境变量才会启用
+- 默认开启安全模式
+- 高风险 MCP 工具默认关闭，只有显式启用才会暴露
 - 社区 adapter 默认禁用
-- 关闭后台静默 `git pull`
+- 禁用后台静默 `git pull`
 - Chrome 扩展移除了 `history` 权限
+- CLI 优先走真实的 `daemon + extension` 主链路，而不是旧的受管浏览器 CDP 探测路径
+- MCP 增加了一个只读 resource，避免 Codex 对 `resources/list` 打警告
 
-你已经登录了微博、知乎、B站、小红书、Twitter、GitHub、LinkedIn — bb-browser 让 AI Agent **直接用你的登录态**。
+## 为什么要做这个 fork
+
+上游 `bb-browser` 很强，但它的默认假设更偏向“能力最大化”，而不是“边界收紧”：
+
+- 它可以在真实登录态页面里执行任意 JavaScript
+- 它可以查看网络请求与浏览器历史
+- 它可以从远端仓库拉取并执行社区 adapter 代码
+- 它的 CLI 同时混用了两条执行链路：直接 CDP 和 daemon + extension
+
+对于 Codex 这种 agent 驱动环境，这套默认值过于宽松。这个 fork 的目标不是去掉能力，而是把默认值改成“先安全、再按需显式解锁”。
+
+也就是说，这个 fork 的默认策略是不立刻信任：
+
+- 远端 adapter 代码
+- 历史记录推荐逻辑
+- 任意页面 `eval`
+- 抓包和 body 读取能力
+
+## 与上游的主要差异
+
+| 维度 | 上游 `bb-browser` | `bb-browser-safe` |
+|---|---|---|
+| MCP 默认值 | 暴露完整浏览器控制面 | 默认安全模式 |
+| `browser_eval` | 默认启用 | 默认关闭 |
+| `browser_network` | 默认启用 | 默认关闭 |
+| `site_run` | 默认启用 | 默认关闭 |
+| `site_update` | 默认启用 | 默认关闭 |
+| 社区 adapter | 默认读取 `~/.bb-browser/bb-sites` | 除非显式启用，否则忽略 |
+| 自动更新 | 后台静默 `git pull` | 禁用 |
+| 扩展权限 | 包含 `history` | 移除 `history` |
+| Codex resources | 不实现 resources，会对 `resources/list` 报警告 | 增加无害只读状态 resource |
+| CLI 通信路径 | 经常回退到受管浏览器 CDP 探测 | 优先走 daemon + extension |
+
+## 分支与提交说明
+
+这个仓库被刻意拆成 3 个阶段，便于你按需对比、cherry-pick 或只使用其中一层。
+
+### `phase-1-safe-defaults`
+
+提交：`e0fe5c6`
+
+这一阶段的改动：
+
+- 在 MCP 里加入安全模式开关
+- 默认关闭高风险工具
+- 默认禁用社区 adapter
+- 默认禁用历史推荐
+- 禁用静默 adapter 更新
+- 去掉扩展的 `history` 权限
+
+如果你只想要“安全默认值收紧”，但暂时不关心 Codex 本地安装体验，可以只看这个分支。
+
+### `phase-2-codex-installer`
+
+提交：`85ea7d8`
+
+在 phase 1 基础上增加：
+
+- Codex 安装脚本
+- Codex MCP 配置模板
+- 本地 Codex 安装文档
+
+如果你想要“安全默认值 + 一套干净的 Codex 接入方式”，可以看这个分支。
+
+### `phase-3-daemon-first-cli`
+
+提交：`11c9952`
+
+在 phase 2 基础上增加：
+
+- CLI 改成优先走 daemon
+- 修正 `status` 对 daemon/extension 状态的识别
+- 修复扩展链路已经存在时 CLI 还误走旧 CDP 路径的问题
+- MCP 增加只读 resource，修掉 `resources/list` 的 WARN
+
+如果你想要“真正可用的完整 fork”，这个分支已经够用。
+
+### `main`
+
+当前 `main` 在 phase 3 基础上继续补了完整 README 和分支说明，适合作为公开默认分支使用。
+
+## 仓库布局
+
+- `main`：完整可用版本，适合日常使用
+- `phase-1-safe-defaults`：只做安全基线收紧
+- `phase-2-codex-installer`：安全基线 + Codex 安装工具
+- `phase-3-daemon-first-cli`：安全基线 + Codex 安装 + CLI/daemon/resource 修复
+
+## 安装
+
+### 前置要求
+
+- Node.js 18+
+- `pnpm`
+- Google Chrome 或 Brave
+- 从本仓库 `extension/` 目录加载的 Chrome 扩展
+
+### 本地构建
 
 ```bash
-bb-browser site twitter/search "AI agent"       # 搜索推文
-bb-browser site zhihu/hot                        # 知乎热榜
-bb-browser site arxiv/search "transformer"       # 搜论文
-bb-browser site eastmoney/stock "茅台"            # 实时股票行情
-bb-browser site boss/search "AI 工程师"           # 搜职位
-bb-browser site wikipedia/summary "Python"       # 维基百科摘要
-bb-browser site youtube/transcript VIDEO_ID      # YouTube 字幕全文
-bb-browser site stackoverflow/search "async"     # 搜 StackOverflow
+git clone https://github.com/suxiaoxinggz/bb-browser-safe.git
+cd bb-browser-safe
+pnpm install --frozen-lockfile
+pnpm build
 ```
 
-**36 个平台，103 个命令，全部用你真实浏览器的登录态。** [完整列表 →](https://github.com/epiral/bb-sites)
+## Chrome 扩展安装
 
-## 核心理念
-
-互联网是为浏览器构建的。AI Agent 一直试图通过 API 访问它 — 但 99% 的网站不提供 API。
-
-bb-browser 翻转了这个逻辑：**不是让网站适配机器，而是让机器使用人的界面。** adapter 在你的浏览器 tab 里跑 `eval`，用你的 Cookie 调 `fetch()`，或者直接调用页面的 webpack 模块。网站以为是你在操作。因为**就是你**。
-
-| | Playwright / Selenium | 爬虫库 | bb-browser |
-|---|---|---|---|
-| 浏览器 | 无头、隔离环境 | 没有浏览器 | 你的真实 Chrome |
-| 登录态 | 没有，要重新登录 | 偷 Cookie | 已经在了 |
-| 反爬检测 | 容易被识别 | 猫鼠游戏 | 无法检测 — 它就是用户 |
-| 复杂鉴权 | 无法复制 | 需要逆向 | 页面自己处理 |
-
-## 快速开始
-
-### 安装
+把已解压扩展加载自：
 
 ```bash
-npm install -g bb-browser
+./extension
 ```
 
-### 使用
+在 Chrome 中：
 
-这个 hardened 版本默认只跑你自己审过的本地 adapter：
+1. 打开 `chrome://extensions/`
+2. 开启开发者模式
+3. 点击“加载已解压的扩展程序”
+4. 选择本仓库的 `extension/` 目录
+
+加载后，扩展应该连接本地 daemon：`localhost:19824`。
+
+## 给 Codex 安装
+
+这个仓库自带一个本地安装脚本：
 
 ```bash
-bb-browser site list          # 仅列出本地 adapter
-bb-browser site info foo/bar  # 查看已审查 adapter
-bb-browser site foo/bar       # 运行本地 adapter
+cd /Users/suxiaoxing/bb-browser-safe
+pnpm install --frozen-lockfile
+pnpm build
+bash scripts/install-codex-mcp.sh
 ```
 
-### OpenClaw（无需安装扩展）
+脚本会往 `~/.codex/config.toml` 追加一个受管理配置块，形式如下：
 
-如果你使用 [OpenClaw](https://openclaw.ai)，bb-browser 可以直接通过 OpenClaw 内置浏览器运行，不需要额外安装 Chrome 扩展或 daemon：
+```toml
+[mcp_servers.bb_browser_safe]
+command = "node"
+args = ["/Users/suxiaoxing/bb-browser-safe/dist/mcp.js"]
+startup_timeout_sec = 60.0
 
-```bash
-bb-browser site reddit/hot --openclaw
-bb-browser site xueqiu/hot-stock 5 --openclaw --jq '.items[] | {name, changePercent}'
+[mcp_servers.bb_browser_safe.env]
+BB_BROWSER_SAFE_MODE = "1"
+BB_BROWSER_ENABLE_EVAL = "0"
+BB_BROWSER_ENABLE_NETWORK = "0"
+BB_BROWSER_ENABLE_SITE_RUN = "0"
+BB_BROWSER_ENABLE_SITE_RECOMMEND = "0"
+BB_BROWSER_ENABLE_SITE_UPDATE = "0"
+BB_BROWSER_ALLOW_COMMUNITY_SITES = "0"
+BB_BROWSER_ALLOW_COMMUNITY_UPDATES = "0"
+BB_BROWSER_ALLOW_HISTORY_RECOMMEND = "0"
 ```
 
-ClawHub Skill: [bb-browser-openclaw](https://clawhub.ai/yan5xu/bb-browser)
+安装完成后：
 
-### Chrome 扩展（独立模式）
+1. 重启 Codex
+2. 确认扩展仍然已加载
+3. 用低风险命令做一次验证，例如 `tab list` 或 `snapshot`
 
-不使用 OpenClaw 时（Claude Code MCP、独立 CLI）需要安装扩展：
+## 运行模型
 
-1. 从 [Releases](https://github.com/epiral/bb-browser/releases/latest) 下载 zip
-2. 解压 → `chrome://extensions/` → 开发者模式 → 加载已解压的扩展程序
+这个 fork 预期使用的是下面这条链路：
 
-### MCP 接入（Claude Code / Cursor）
-
-```json
-{
-  "mcpServers": {
-    "bb-browser": {
-      "command": "npx",
-      "args": ["-y", "bb-browser", "--mcp"]
-    }
-  }
-}
+```text
+Codex / MCP 客户端
+  -> 本地 MCP server
+  -> bb-browser daemon (localhost:19824)
+  -> Chrome 扩展
+  -> 真实浏览器标签页
 ```
 
-默认情况下，MCP 只暴露风险较低的浏览器操作工具，以及 `site_list`、`site_search`、`site_info`。
+这个 fork 里的 CLI 已调整为优先走这条链路。直接 CDP 连接只保留为兜底回退路径。
 
-如果你要重新开启受限能力，请在启动前显式设置环境变量：
+## 默认安全模式行为
+
+当 `BB_BROWSER_SAFE_MODE=1` 时：
+
+- 默认启用：
+  - `browser_snapshot`
+  - `browser_click`
+  - `browser_fill`
+  - `browser_type`
+  - `browser_open`
+  - `browser_tab_list`
+  - `browser_tab_new`
+  - `browser_press`
+  - `browser_scroll`
+  - `browser_screenshot`
+  - `browser_get`
+  - `browser_close`
+  - `browser_close_all`
+  - `browser_hover`
+  - `browser_wait`
+  - `site_list`
+  - `site_search`
+  - `site_info`
+
+- 默认关闭：
+  - `browser_eval`
+  - `browser_network`
+  - `site_run`
+  - `site_recommend`
+  - `site_update`
+
+## 如何重新开启受限功能
+
+如果你明确要恢复原版那种更高风险的行为，可以在启动 MCP 前设置环境变量：
 
 ```bash
 export BB_BROWSER_ENABLE_EVAL=1
@@ -116,130 +232,66 @@ export BB_BROWSER_ALLOW_COMMUNITY_UPDATES=1
 export BB_BROWSER_ALLOW_HISTORY_RECOMMEND=1
 ```
 
-### 给 Codex 安装
+建议规则：
 
-这个仓库自带一个本地安装脚本，可以直接把 hardened MCP 配到 Codex：
+- 一次只开启一种能力
+- 社区 adapter 只有在你看过源码之后再启用
+
+## 本地 reviewed adapter
+
+审查过的 adapter 建议放在：
+
+```bash
+~/.bb-browser/sites/
+```
+
+这个 fork 把这个目录视为更合理的本地信任边界。
+
+## 快速验证
+
+当 daemon 和扩展都连接后，可以这样验证：
+
+```bash
+node dist/cli.js status --json
+node dist/cli.js tab list --json
+node dist/cli.js snapshot -i --json
+```
+
+预期行为：
+
+- `status` 显示 `running: true`
+- `tab list` 返回真实标签页
+- `snapshot` 在普通网页上成功，在 `chrome://extensions` 这种受限页面上失败
+
+## 安全说明
+
+这个 fork 的默认值比上游安全，但它依然是高权限软件。
+
+它仍然可以：
+
+- 控制你的真实浏览器
+- 使用你的真实登录态
+- 点击、输入、导航、读取页面内容
+
+所以正确的心智模型应该是：
+
+- 默认更安全
+- 但它不是沙箱
+
+## 推送这个仓库
+
+如果你本地最初是从 upstream 克隆过来的，想发布到自己的远端，可以这样做：
 
 ```bash
 cd /Users/suxiaoxing/bb-browser-safe
-pnpm install --frozen-lockfile
-pnpm build
-bash scripts/install-codex-mcp.sh
-```
-
-脚本会在 `~/.codex/config.toml` 里追加一个受管理的配置块，并让 Codex 直接调用本地 build 出来的 MCP：
-
-```toml
-[mcp_servers.bb_browser_safe]
-command = "node"
-args = ["/Users/suxiaoxing/bb-browser-safe/dist/mcp.js"]
-startup_timeout_sec = 60.0
-```
-
-执行完后，重启 Codex，并把 `./extension` 作为已解压扩展加载到 Chrome。
-
-## 36 个平台，103 个命令
-
-社区驱动，通过 [bb-sites](https://github.com/epiral/bb-sites) 维护。每个命令一个 JS 文件。
-
-在这个 hardened fork 里，社区 adapter 默认不会被加载。你可以先审查后复制到 `~/.bb-browser/sites/`，或者显式设置 `BB_BROWSER_ALLOW_COMMUNITY_SITES=1`。
-
-| 类别 | 平台 | 命令 |
-|------|------|------|
-| **搜索引擎** | Google、百度、Bing、DuckDuckGo、搜狗微信 | search |
-| **社交媒体** | Twitter/X、Reddit、微博、小红书、即刻、LinkedIn、虎扑 | search、feed、thread、user、notifications、hot |
-| **新闻资讯** | BBC、Reuters、36氪、今日头条、东方财富 | headlines、search、newsflash、hot |
-| **技术开发** | GitHub、StackOverflow、HackerNews、CSDN、博客园、V2EX、Dev.to、npm、PyPI、arXiv | search、issues、repo、top、thread、package |
-| **视频平台** | YouTube、B站 | search、video、transcript、popular、comments、feed |
-| **影音娱乐** | 豆瓣、IMDb、Genius、起点中文网 | movie、search、top250 |
-| **财经股票** | 雪球、东方财富、Yahoo Finance | stock、hot-stock、feed、watchlist、search |
-| **求职招聘** | BOSS直聘、LinkedIn | search、detail、profile |
-| **知识百科** | Wikipedia、知乎、Open Library | search、summary、hot、question |
-| **消费购物** | 什么值得买 | search |
-| **实用工具** | 有道翻译、GSMArena、Product Hunt、携程 | translate、手机参数、热门产品 |
-
-## 10 分钟，CLI 化任何网站
-
-```bash
-bb-browser guide    # 完整教程
-```
-
-跟你的 AI Agent 说：*「帮我把 XX 网站 CLI 化」*。它会读 guide，用 `network --with-body` 抓包逆向，写 adapter，测试，然后提 PR 到社区仓库。全程自动。
-
-三种 adapter 复杂度：
-
-| 层级 | 认证方式 | 代表 | 耗时 |
-|------|----------|------|------|
-| **Tier 1** | Cookie（直接 fetch） | Reddit、GitHub、V2EX | ~1 分钟 |
-| **Tier 2** | Bearer + CSRF token | Twitter、知乎 | ~3 分钟 |
-| **Tier 3** | Webpack 注入 / Pinia store | Twitter 搜索、小红书 | ~10 分钟 |
-
-实测：**20 个 AI Agent 并发运行，每个独立逆向一个网站并产出可用的 adapter。** 将一个新网站纳入 Agent 可访问范围的边际成本趋近于零。
-
-## 对 AI Agent 意味着什么
-
-没有 bb-browser，AI Agent 的世界是：**文件系统 + 终端 + 少数有 API key 的服务。**
-
-有了 bb-browser：**文件系统 + 终端 + 整个互联网。**
-
-一个 Agent 现在可以在一分钟内：
-
-```bash
-# 跨平台调研任何话题
-bb-browser site arxiv/search "retrieval augmented generation"
-bb-browser site twitter/search "RAG"
-bb-browser site github search rag-framework
-bb-browser site stackoverflow/search "RAG implementation"
-bb-browser site zhihu/search "RAG"
-bb-browser site 36kr/newsflash
-```
-
-六个平台，六个维度，结构化 JSON。比任何人类研究员都快、都广。
-
-## 同时也是完整的浏览器自动化工具
-
-```bash
-bb-browser open https://example.com
-bb-browser snapshot -i                # 可访问性树
-bb-browser click @3                   # 点击元素
-bb-browser fill @5 "hello"            # 填写输入框
-bb-browser eval "document.title"      # 执行 JS
-bb-browser fetch URL --json           # 带登录态的 fetch
-bb-browser network requests --with-body --json  # 抓包
-bb-browser screenshot                 # 截图
-```
-
-所有命令支持 `--json` 输出、`--jq <expr>` 内联过滤、和 `--tab <id>` 多标签页并发操作。
-
-```bash
-bb-browser site xueqiu/hot-stock 5 --jq '.items[] | {name, changePercent}'
-# {"name":"云天化","changePercent":"2.08%"}
-# {"name":"东芯股份","changePercent":"-7.60%"}
-
-bb-browser site info xueqiu/stock   # 查看 adapter 参数、示例、域名
-```
-
-## Daemon 配置
-
-Daemon 默认绑定 `localhost:19824`，可通过 `--host` 自定义监听地址：
-
-```bash
-bb-browser daemon --host 127.0.0.1    # 仅 IPv4（解决 macOS IPv6 问题）
-bb-browser daemon --host 0.0.0.0      # 监听所有网卡（用于 Tailscale / ZeroTier 跨机器访问）
-```
-
-## 架构
-
-```
-AI Agent (Claude Code, Codex, Cursor 等)
-       │ CLI 或 MCP (stdio)
-       ▼
-bb-browser CLI ──HTTP──▶ Daemon ──SSE──▶ Chrome 扩展
-                                              │
-                                              ▼ chrome.debugger (CDP)
-                                         你的真实浏览器
+git remote rename origin upstream
+git remote add origin https://github.com/suxiaoxinggz/bb-browser-safe.git
+git push -u origin main
+git push origin phase-1-safe-defaults
+git push origin phase-2-codex-installer
+git push origin phase-3-daemon-first-cli
 ```
 
 ## 许可证
 
-[MIT](LICENSE)
+MIT，继承自上游项目。
