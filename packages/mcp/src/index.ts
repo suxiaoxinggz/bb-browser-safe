@@ -250,6 +250,30 @@ Safe site adapter tools:
 To create a new site adapter, run: bb-browser guide` },
 );
 
+server.resource(
+  "bb-browser-status",
+  "bb-browser://status",
+  {
+    description: "Status marker resource for Codex resource discovery",
+    mimeType: "application/json",
+  },
+  async () => ({
+    contents: [{
+      uri: "bb-browser://status",
+      mimeType: "application/json",
+      text: JSON.stringify({
+        name: "bb-browser",
+        safeMode: SAFE_MODE,
+        evalEnabled: ENABLE_BROWSER_EVAL,
+        networkEnabled: ENABLE_BROWSER_NETWORK,
+        siteRunEnabled: ENABLE_SITE_RUN,
+        siteRecommendEnabled: ENABLE_SITE_RECOMMEND,
+        siteUpdateEnabled: ENABLE_SITE_UPDATE,
+      }, null, 2),
+    }],
+  }),
+);
+
 server.tool(
   "browser_snapshot",
   "Get accessibility tree snapshot of the current page",
