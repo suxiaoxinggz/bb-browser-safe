@@ -179,6 +179,7 @@ BB_BROWSER_ALLOW_HISTORY_RECOMMEND = "0"
 ```bash
 bash scripts/enable-safe-mode.sh
 bash scripts/enable-power-mode.sh
+bash scripts/status-mode.sh
 ```
 
 这两个脚本会改写 `~/.codex/config.toml` 里受管理的 `bb_browser_safe` 配置块。执行之后，需要你重启一次 Codex。
@@ -211,6 +212,12 @@ bash scripts/enable-safe-mode.sh
 
 ```bash
 bash scripts/enable-safe-mode.sh --with-history
+```
+
+如果你想查看当前到底处于什么模式，以及已解压扩展里是否带有 `history` 权限，可以执行：
+
+```bash
+bash scripts/status-mode.sh
 ```
 
 ## 运行模型

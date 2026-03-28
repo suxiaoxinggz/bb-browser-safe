@@ -21,6 +21,7 @@
     "install:codex": "bash scripts/install-codex-mcp.sh",
     "mode:safe": "bash scripts/enable-safe-mode.sh",
     "mode:power": "bash scripts/enable-power-mode.sh",
+    "mode:status": "bash scripts/status-mode.sh",
     "dev": "turbo run dev",
     "test": "turbo run test",
     "lint": "turbo run lint",

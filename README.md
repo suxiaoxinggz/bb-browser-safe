@@ -172,6 +172,7 @@ This fork includes two mode-switch scripts:
 ```bash
 bash scripts/enable-safe-mode.sh
 bash scripts/enable-power-mode.sh
+bash scripts/status-mode.sh
 ```
 
 These scripts rewrite the managed `bb_browser_safe` block in `~/.codex/config.toml`. After running either script, restart Codex.
@@ -204,6 +205,12 @@ To also remove the extension `history` permission again:
 
 ```bash
 bash scripts/enable-safe-mode.sh --with-history
+```
+
+To inspect the current MCP mode and whether the unpacked extension has `history` enabled:
+
+```bash
+bash scripts/status-mode.sh
 ```
 
 ## Runtime model
